@@ -22,9 +22,9 @@ use std::iter::FromIterator;
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::ptr;
-use std::sync::{Once, ONCE_INIT};
+use std::sync::Once;
 
-static mut AVFORMAT_INIT: Once = ONCE_INIT;
+static mut AVFORMAT_INIT: Once = Once::new();
 
 /// MPEG video recorder.
 pub struct Encoder {
@@ -148,11 +148,11 @@ impl Encoder {
 
         self.init();
 
-        let mut pkt: AVPacket = unsafe { mem::uninitialized() };
-
-        unsafe {
-            ffmpeg_sys::av_init_packet(&mut pkt);
-        }
+        let mut pkt = unsafe {
+            let mut pkt: mem::MaybeUninit<AVPacket> = mem::MaybeUninit::uninit();
+            ffmpeg_sys::av_init_packet(pkt.as_mut_ptr());
+            pkt.assume_init()
+        };
 
         pkt.data = ptr::null_mut(); // packet data will be allocated by the encoder
         pkt.size = 0;
@@ -456,7 +456,12 @@ impl Drop for Encoder {
     fn drop(&mut self) {
         if self.initialized {
             // Get the delayed frames.
-            let mut pkt: AVPacket = unsafe { mem::uninitialized() };
+            let mut pkt = unsafe {
+                let mut pkt: mem::MaybeUninit<AVPacket> = mem::MaybeUninit::uninit();
+                ffmpeg_sys::av_init_packet(pkt.as_mut_ptr());
+                pkt.assume_init()
+            };
+
             let mut got_output = 1;
             while got_output != 0 {
                 let ret;
