@@ -9,6 +9,10 @@ readme = "README.md"
 keywords = [ "encoder", "ffmpeg", "mpeg", "video" ]
 license = "BSD-3-Clause"
 
+[features]
+default = []
+build=["ffmpeg-sys/build"]
+
 [dependencies.ffmpeg-sys]
 version = "4.2.1"
 default-features = false
