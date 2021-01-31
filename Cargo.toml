@@ -10,6 +10,6 @@ keywords = [ "encoder", "ffmpeg", "mpeg", "video" ]
 license = "BSD-3-Clause"
 
 [dependencies.ffmpeg-sys]
-version = "3.3.*"
+version = "4.2.1"
 default-features = false
 features = [ "avformat", "swscale" ]

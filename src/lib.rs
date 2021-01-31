@@ -215,7 +215,7 @@ impl Encoder {
                 &(*self.tmp_frame).linesize[0],
                 0,
                 height as i32,
-                &(*self.frame).data[0] as *const *mut u8 as *const *const u8,
+                &(*self.frame).data[0] as *const *mut u8,
                 &(*self.frame).linesize[0],
             );
         }
