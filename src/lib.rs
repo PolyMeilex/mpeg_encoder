@@ -26,6 +26,14 @@ use std::sync::Once;
 
 static mut AVFORMAT_INIT: Once = Once::new();
 
+#[derive(PartialEq)]
+enum ColorFormat {
+    Rgb,
+    Rgba,
+    Bgr,
+    Bgra,
+}
+
 /// MPEG video recorder.
 pub struct Encoder {
     tmp_frame_buf: Vec<u8>,
@@ -124,13 +132,25 @@ impl Encoder {
     /// Adds a image with a RGB pixel format to the video.
     pub fn encode_rgb(&mut self, width: usize, height: usize, data: &[u8], vertical_flip: bool) {
         assert_eq!(data.len(), width * height * 3);
-        self.encode(width, height, data, false, vertical_flip)
+        self.encode(width, height, data, ColorFormat::Rgb, vertical_flip)
     }
 
     /// Adds a image with a RGBA pixel format to the video.
     pub fn encode_rgba(&mut self, width: usize, height: usize, data: &[u8], vertical_flip: bool) {
         assert_eq!(data.len(), width * height * 4);
-        self.encode(width, height, data, true, vertical_flip)
+        self.encode(width, height, data, ColorFormat::Rgba, vertical_flip)
+    }
+
+    /// Adds a image with a BGRA pixel format to the video.
+    pub fn encode_bgr(&mut self, width: usize, height: usize, data: &[u8], vertical_flip: bool) {
+        assert_eq!(data.len(), width * height * 3);
+        self.encode(width, height, data, ColorFormat::Bgr, vertical_flip)
+    }
+
+    /// Adds a image with a BGRA pixel format to the video.
+    pub fn encode_bgra(&mut self, width: usize, height: usize, data: &[u8], vertical_flip: bool) {
+        assert_eq!(data.len(), width * height * 4);
+        self.encode(width, height, data, ColorFormat::Bgra, vertical_flip)
     }
 
     fn encode(
@@ -138,12 +158,14 @@ impl Encoder {
         width: usize,
         height: usize,
         data: &[u8],
-        rgba: bool,
+        color_format: ColorFormat,
         vertical_flip: bool,
     ) {
+        let has_alpha = color_format == ColorFormat::Rgba || color_format == ColorFormat::Bgra;
+
         assert!(
-            (rgba && data.len() == width * height * 4)
-                || (!rgba && data.len() == width * height * 3)
+            (has_alpha && data.len() == width * height * 4)
+                || (!has_alpha && data.len() == width * height * 3)
         );
 
         self.init();
@@ -162,14 +184,31 @@ impl Encoder {
         //
         self.tmp_frame_buf.resize(width * height * 3, 0);
 
-        if rgba {
-            for (i, pixel) in data.chunks(4).enumerate() {
-                self.tmp_frame_buf[i * 3] = pixel[0];
-                self.tmp_frame_buf[i * 3 + 1] = pixel[1];
-                self.tmp_frame_buf[i * 3 + 2] = pixel[2];
+        match color_format {
+            ColorFormat::Rgba => {
+                for (i, pixel) in data.chunks(4).enumerate() {
+                    self.tmp_frame_buf[i * 3] = pixel[0];
+                    self.tmp_frame_buf[i * 3 + 1] = pixel[1];
+                    self.tmp_frame_buf[i * 3 + 2] = pixel[2];
+                }
             }
-        } else {
-            self.tmp_frame_buf.clone_from_slice(data);
+            ColorFormat::Rgb => {
+                self.tmp_frame_buf.clone_from_slice(data);
+            }
+            ColorFormat::Bgra => {
+                for (i, pixel) in data.chunks(4).enumerate() {
+                    self.tmp_frame_buf[i * 3] = pixel[2];
+                    self.tmp_frame_buf[i * 3 + 1] = pixel[1];
+                    self.tmp_frame_buf[i * 3 + 2] = pixel[0];
+                }
+            }
+            ColorFormat::Bgr => {
+                for (i, pixel) in data.chunks(3).enumerate() {
+                    self.tmp_frame_buf[i * 3] = pixel[2];
+                    self.tmp_frame_buf[i * 3 + 1] = pixel[1];
+                    self.tmp_frame_buf[i * 3 + 2] = pixel[0];
+                }
+            }
         }
 
         if vertical_flip {
