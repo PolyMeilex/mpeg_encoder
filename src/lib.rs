@@ -12,14 +12,16 @@ extern crate ffmpeg_sys;
 
 // Inspired by the muxing sample: http://ffmpeg.org/doxygen/trunk/muxing_8c-source.html
 
-use ffmpeg_sys::{SwsContext, AVCodec, AVCodecContext, AVPacket, AVFormatContext, AVStream,
-                 AVFrame, AVRational, AVPixelFormat, AVPicture, AVCodecID};
-use std::ptr;
-use std::mem;
-use std::iter;
-use std::path::{Path, PathBuf};
+use ffmpeg_sys::{
+    AVCodec, AVCodecContext, AVCodecID, AVFormatContext, AVFrame, AVPacket, AVPicture,
+    AVPixelFormat, AVRational, AVStream, SwsContext,
+};
 use std::ffi::CString;
+use std::iter;
 use std::iter::FromIterator;
+use std::mem;
+use std::path::{Path, PathBuf};
+use std::ptr;
 use std::sync::{Once, ONCE_INIT};
 
 static mut AVFORMAT_INIT: Once = ONCE_INIT;
@@ -69,15 +71,16 @@ impl Encoder {
     /// * `gop_size`     - the number of pictures in a group of pictures. Default value: 10.
     /// * `max_b_frames` - maximum number of B-frames between non-B-frames. Default value: 1.
     /// * `pix_fmt`      - pixel format. Default value: `AVPixelFormat::PIX_FMT_YUV420P`.
-    pub fn new_with_params<P: AsRef<Path>>(path: P,
-                                           width: usize,
-                                           height: usize,
-                                           bit_rate: Option<usize>,
-                                           time_base: Option<(usize, usize)>,
-                                           gop_size: Option<usize>,
-                                           max_b_frames: Option<usize>,
-                                           pix_fmt: Option<AVPixelFormat>)
-                                           -> Encoder {
+    pub fn new_with_params<P: AsRef<Path>>(
+        path: P,
+        width: usize,
+        height: usize,
+        bit_rate: Option<usize>,
+        time_base: Option<(usize, usize)>,
+        gop_size: Option<usize>,
+        max_b_frames: Option<usize>,
+        pix_fmt: Option<AVPixelFormat>,
+    ) -> Encoder {
         unsafe {
             AVFORMAT_INIT.call_once(|| {
                 ffmpeg_sys::av_register_all();
@@ -90,16 +93,8 @@ impl Encoder {
         let max_b_frames = max_b_frames.unwrap_or(1);
         let pix_fmt = pix_fmt.unwrap_or(AVPixelFormat::AV_PIX_FMT_YUV420P);
         // width and height must be a multiple of two.
-        let width = if width % 2 == 0 {
-            width
-        } else {
-            width + 1
-        };
-        let height = if height % 2 == 0 {
-            height
-        } else {
-            height + 1
-        };
+        let width = if width % 2 == 0 { width } else { width + 1 };
+        let height = if height % 2 == 0 { height } else { height + 1 };
 
         let mut pathbuf = PathBuf::new();
         pathbuf.push(path);
@@ -138,14 +133,18 @@ impl Encoder {
         self.encode(width, height, data, true, vertical_flip)
     }
 
-    fn encode(&mut self,
-              width: usize,
-              height: usize,
-              data: &[u8],
-              rgba: bool,
-              vertical_flip: bool) {
-        assert!((rgba && data.len() == width * height * 4) ||
-                (!rgba && data.len() == width * height * 3));
+    fn encode(
+        &mut self,
+        width: usize,
+        height: usize,
+        data: &[u8],
+        rgba: bool,
+        vertical_flip: bool,
+    ) {
+        assert!(
+            (rgba && data.len() == width * height * 4)
+                || (!rgba && data.len() == width * height * 3)
+        );
 
         self.init();
 
@@ -155,7 +154,7 @@ impl Encoder {
             ffmpeg_sys::av_init_packet(&mut pkt);
         }
 
-        pkt.data = ptr::null_mut();  // packet data will be allocated by the encoder
+        pkt.data = ptr::null_mut(); // packet data will be allocated by the encoder
         pkt.size = 0;
 
         // Fill the snapshot frame.
@@ -174,13 +173,14 @@ impl Encoder {
         }
 
         if vertical_flip {
-            vflip(self.tmp_frame_buf.as_mut_slice(),
-                  width as usize * 3,
-                  height as usize);
+            vflip(
+                self.tmp_frame_buf.as_mut_slice(),
+                width as usize * 3,
+                height as usize,
+            );
         }
 
         unsafe {
-
             (*self.tmp_frame).width = width as i32;
             (*self.tmp_frame).height = height as i32;
 
@@ -196,18 +196,19 @@ impl Encoder {
         // Convert the snapshot frame to the right format for the destination frame.
         //
         unsafe {
-            self.scale_context =
-                ffmpeg_sys::sws_getCachedContext(self.scale_context,
-                                                 width as i32,
-                                                 height as i32,
-                                                 AVPixelFormat::AV_PIX_FMT_RGB24,
-                                                 self.target_width as i32,
-                                                 self.target_height as i32,
-                                                 AVPixelFormat::AV_PIX_FMT_YUV420P,
-                                                 ffmpeg_sys::SWS_BICUBIC as i32,
-                                                 ptr::null_mut(),
-                                                 ptr::null_mut(),
-                                                 ptr::null());
+            self.scale_context = ffmpeg_sys::sws_getCachedContext(
+                self.scale_context,
+                width as i32,
+                height as i32,
+                AVPixelFormat::AV_PIX_FMT_RGB24,
+                self.target_width as i32,
+                self.target_height as i32,
+                AVPixelFormat::AV_PIX_FMT_YUV420P,
+                ffmpeg_sys::SWS_BICUBIC as i32,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null(),
+            );
 
             let _ = ffmpeg_sys::sws_scale(
                 self.scale_context,
@@ -220,17 +221,18 @@ impl Encoder {
             );
         }
 
-
         // Encode the image.
 
         let mut got_output = 0;
         let ret;
 
         unsafe {
-            ret = ffmpeg_sys::avcodec_encode_video2(self.context,
-                                                    &mut pkt,
-                                                    self.frame,
-                                                    &mut got_output);
+            ret = ffmpeg_sys::avcodec_encode_video2(
+                self.context,
+                &mut pkt,
+                self.frame,
+                &mut got_output,
+            );
         }
 
         if ret < 0 {
@@ -266,14 +268,23 @@ impl Encoder {
             // try to guess the container type from the path.
             let mut fmt = ptr::null_mut();
 
-
-            let _ = ffmpeg_sys::avformat_alloc_output_context2(&mut fmt, ptr::null_mut(), ptr::null(), path_str.as_ptr());
+            let _ = ffmpeg_sys::avformat_alloc_output_context2(
+                &mut fmt,
+                ptr::null_mut(),
+                ptr::null(),
+                path_str.as_ptr(),
+            );
 
             if fmt.is_null() {
                 // could not guess, default to MPEG
                 let mpeg = CString::new(&b"mpeg"[..]).unwrap();
 
-                let _ = ffmpeg_sys::avformat_alloc_output_context2(&mut fmt, ptr::null_mut(), mpeg.as_ptr(), path_str.as_ptr());
+                let _ = ffmpeg_sys::avformat_alloc_output_context2(
+                    &mut fmt,
+                    ptr::null_mut(),
+                    mpeg.as_ptr(),
+                    path_str.as_ptr(),
+                );
             }
 
             self.format_context = fmt;
@@ -314,9 +325,17 @@ impl Encoder {
 
             // sws scaling context
             self.scale_context = ffmpeg_sys::sws_getContext(
-                self.target_width as i32, self.target_height as i32, AVPixelFormat::AV_PIX_FMT_RGB24,
-                self.target_width as i32, self.target_height as i32, self.pix_fmt,
-                ffmpeg_sys::SWS_BICUBIC as i32, ptr::null_mut(), ptr::null_mut(), ptr::null());
+                self.target_width as i32,
+                self.target_height as i32,
+                AVPixelFormat::AV_PIX_FMT_RGB24,
+                self.target_width as i32,
+                self.target_height as i32,
+                self.pix_fmt,
+                ffmpeg_sys::SWS_BICUBIC as i32,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null(),
+            );
 
             (*self.context).codec_id = (*fmt).video_codec;
 
@@ -324,16 +343,19 @@ impl Encoder {
             (*self.context).bit_rate = self.bit_rate as i64;
 
             // Resolution must be a multiple of two.
-            (*self.context).width    = self.target_width  as i32;
-            (*self.context).height   = self.target_height as i32;
+            (*self.context).width = self.target_width as i32;
+            (*self.context).height = self.target_height as i32;
 
             // frames per second.
-            let (tnum, tdenum)           = self.time_base;
-            (*self.context).time_base    = AVRational { num: tnum as i32, den: tdenum as i32 };
-            (*self.video_st).time_base   = (*self.context).time_base;
-            (*self.context).gop_size     = self.gop_size as i32;
+            let (tnum, tdenum) = self.time_base;
+            (*self.context).time_base = AVRational {
+                num: tnum as i32,
+                den: tdenum as i32,
+            };
+            (*self.video_st).time_base = (*self.context).time_base;
+            (*self.context).gop_size = self.gop_size as i32;
             (*self.context).max_b_frames = self.max_b_frames as i32;
-            (*self.context).pix_fmt      = self.pix_fmt;
+            (*self.context).pix_fmt = self.pix_fmt;
 
             if (*self.context).codec_id == AVCodecID::AV_CODEC_ID_MPEG1VIDEO {
                 // Needed to avoid using macroblocks in which some coeffs overflow.
@@ -363,24 +385,28 @@ impl Encoder {
             }
 
             (*self.frame).format = (*self.context).pix_fmt as i32;
-            (*self.frame).width  = (*self.context).width;
+            (*self.frame).width = (*self.context).width;
             (*self.frame).height = (*self.context).height;
-            (*self.frame).pts    = 0;
+            (*self.frame).pts = 0;
 
             // alloc the buffer
-            let nframe_bytes = ffmpeg_sys::avpicture_get_size(self.pix_fmt,
-                                                              self.target_width as i32,
-                                                              self.target_height as i32);
+            let nframe_bytes = ffmpeg_sys::avpicture_get_size(
+                self.pix_fmt,
+                self.target_width as i32,
+                self.target_height as i32,
+            );
 
             let reps = iter::repeat(0u8).take(nframe_bytes as usize);
             self.frame_buf = Vec::<u8>::from_iter(reps);
             //self.frame_buf = Vec::from_elem(nframe_bytes as usize, 0u8);
 
-            let _ = ffmpeg_sys::avpicture_fill(self.frame as *mut AVPicture,
-                                               self.frame_buf.get(0).unwrap(),
-                                               self.pix_fmt,
-                                               self.target_width as i32,
-                                               self.target_height as i32);
+            let _ = ffmpeg_sys::avpicture_fill(
+                self.frame as *mut AVPicture,
+                self.frame_buf.get(0).unwrap(),
+                self.pix_fmt,
+                self.target_width as i32,
+                self.target_height as i32,
+            );
 
             /*
              * Init the temporary video frame.
@@ -404,7 +430,12 @@ impl Encoder {
 
             // Open the output file.
             static AVIO_FLAG_WRITE: i32 = 2; // XXX: this should be defined by the bindings.
-            if ffmpeg_sys::avio_open(&mut (*self.format_context).pb, path_str.as_ptr(), AVIO_FLAG_WRITE) < 0 {
+            if ffmpeg_sys::avio_open(
+                &mut (*self.format_context).pb,
+                path_str.as_ptr(),
+                AVIO_FLAG_WRITE,
+            ) < 0
+            {
                 panic!("Failed to open the output file.");
             }
 
@@ -434,14 +465,16 @@ impl Drop for Encoder {
                     ffmpeg_sys::av_init_packet(&mut pkt);
                 }
 
-                pkt.data = ptr::null_mut();  // packet data will be allocated by the encoder
+                pkt.data = ptr::null_mut(); // packet data will be allocated by the encoder
                 pkt.size = 0;
 
                 unsafe {
-                    ret = ffmpeg_sys::avcodec_encode_video2(self.context,
-                                                            &mut pkt,
-                                                            ptr::null(),
-                                                            &mut got_output);
+                    ret = ffmpeg_sys::avcodec_encode_video2(
+                        self.context,
+                        &mut pkt,
+                        ptr::null(),
+                        &mut got_output,
+                    );
                 }
 
                 if ret < 0 {
@@ -450,8 +483,8 @@ impl Drop for Encoder {
 
                 if got_output != 0 {
                     unsafe {
-                        let _ = ffmpeg_sys::av_interleaved_write_frame(self.format_context,
-                                                                       &mut pkt);
+                        let _ =
+                            ffmpeg_sys::av_interleaved_write_frame(self.format_context, &mut pkt);
                         ffmpeg_sys::av_free_packet(&mut pkt);
                     }
                 }
