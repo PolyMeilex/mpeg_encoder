@@ -34,6 +34,17 @@ enum ColorFormat {
     Bgra,
 }
 
+impl Into<AVPixelFormat> for &ColorFormat {
+    fn into(self) -> AVPixelFormat {
+        match self {
+            ColorFormat::Rgb => AVPixelFormat::AV_PIX_FMT_RGB24,
+            ColorFormat::Rgba => AVPixelFormat::AV_PIX_FMT_RGBA,
+            ColorFormat::Bgr => AVPixelFormat::AV_PIX_FMT_BGR24,
+            ColorFormat::Bgra => AVPixelFormat::AV_PIX_FMT_BGRA,
+        }
+    }
+}
+
 /// MPEG video recorder.
 pub struct Encoder {
     tmp_frame_buf: Vec<u8>,
@@ -182,39 +193,15 @@ impl Encoder {
         // Fill the snapshot frame.
         //
         //
-        self.tmp_frame_buf.resize(width * height * 3, 0);
+        let pixel_len = if has_alpha { 4 } else { 3 };
 
-        match color_format {
-            ColorFormat::Rgba => {
-                for (i, pixel) in data.chunks(4).enumerate() {
-                    self.tmp_frame_buf[i * 3] = pixel[0];
-                    self.tmp_frame_buf[i * 3 + 1] = pixel[1];
-                    self.tmp_frame_buf[i * 3 + 2] = pixel[2];
-                }
-            }
-            ColorFormat::Rgb => {
-                self.tmp_frame_buf.clone_from_slice(data);
-            }
-            ColorFormat::Bgra => {
-                for (i, pixel) in data.chunks(4).enumerate() {
-                    self.tmp_frame_buf[i * 3] = pixel[2];
-                    self.tmp_frame_buf[i * 3 + 1] = pixel[1];
-                    self.tmp_frame_buf[i * 3 + 2] = pixel[0];
-                }
-            }
-            ColorFormat::Bgr => {
-                for (i, pixel) in data.chunks(3).enumerate() {
-                    self.tmp_frame_buf[i * 3] = pixel[2];
-                    self.tmp_frame_buf[i * 3 + 1] = pixel[1];
-                    self.tmp_frame_buf[i * 3 + 2] = pixel[0];
-                }
-            }
-        }
+        self.tmp_frame_buf.resize(width * height * pixel_len, 0);
+        self.tmp_frame_buf.clone_from_slice(data);
 
         if vertical_flip {
             vflip(
                 self.tmp_frame_buf.as_mut_slice(),
-                width as usize * 3,
+                width as usize * pixel_len,
                 height as usize,
             );
         }
@@ -226,7 +213,7 @@ impl Encoder {
             let _ = ffmpeg_sys::avpicture_fill(
                 self.tmp_frame as *mut AVPicture,
                 &self.tmp_frame_buf[0],
-                AVPixelFormat::AV_PIX_FMT_RGB24,
+                (&color_format).into(),
                 width as i32,
                 height as i32,
             );
@@ -239,7 +226,7 @@ impl Encoder {
                 self.scale_context,
                 width as i32,
                 height as i32,
-                AVPixelFormat::AV_PIX_FMT_RGB24,
+                (&color_format).into(),
                 self.target_width as i32,
                 self.target_height as i32,
                 AVPixelFormat::AV_PIX_FMT_YUV420P,
