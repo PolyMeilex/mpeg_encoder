@@ -16,7 +16,7 @@ use ffmpeg_sys::{
     AVCodec, AVCodecContext, AVCodecID, AVFormatContext, AVFrame, AVPacket, AVPicture,
     AVPixelFormat, AVRational, AVStream, SwsContext,
 };
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::iter;
 use std::iter::FromIterator;
 use std::mem;
@@ -179,7 +179,7 @@ impl Encoder {
                 || (!has_alpha && data.len() == width * height * 3)
         );
 
-        self.init();
+        self.init(None,None);
 
         let mut pkt = unsafe {
             let mut pkt: mem::MaybeUninit<AVPacket> = mem::MaybeUninit::uninit();
@@ -283,7 +283,7 @@ impl Encoder {
     ///
     /// This is automatically called when the first snapshot is made. Call this explicitly if you
     /// do not want the extra time overhead when the first snapshot is made.
-    pub fn init(&mut self) {
+    pub fn init(&mut self, crf: Option<f32>, preset: Option<&str>) {
         if self.initialized {
             return;
         }
@@ -347,6 +347,77 @@ impl Encoder {
 
             if self.context.is_null() {
                 panic!("Could not allocate video codec context.");
+            }
+
+            {
+                if let Some(crf) = crf{
+                    let name = CString::new("crf").unwrap();
+                    let val = CString::new(crf.to_string()).unwrap();
+                    let _ = ffmpeg_sys::av_opt_set(
+                        (*self.context).priv_data,
+                        name.as_ptr(),
+                        val.as_ptr(),
+                        0,
+                    );
+                }
+                if let Some(preset) = preset{
+                    let name = CString::new("preset").unwrap();
+                    let val = CString::new(preset).unwrap();
+                    let _ = ffmpeg_sys::av_opt_set(
+                        (*self.context).priv_data,
+                        name.as_ptr(),
+                        val.as_ptr(),
+                        0,
+                    );
+                }
+
+                // {
+                //     let mut opt: *const ffmpeg_sys::AVOption = std::ptr::null();
+                //     loop {
+                //         opt = ffmpeg_sys::av_opt_next((*self.context).priv_data, opt);
+
+                //         if opt.is_null() {
+                //             println!("break");
+                //             break;
+                //         }
+
+                //         // Last Christmast
+                //         let out_str = CString::new("").unwrap();
+
+                //         // I gave you my memory
+                //         let mut out_str_ptr = out_str.into_raw();
+
+                //         // But the very next day you gave it away
+                //         let err = ffmpeg_sys::av_opt_get(
+                //             (*self.context).priv_data,
+                //             (*opt).name,
+                //             0,
+                //             ((&mut out_str_ptr) as *mut _) as *mut *mut u8,
+                //         );
+
+                //         if err >= 0 {
+                //             // This year, to save me from tears
+                //             // I'll give it to someone special
+                //             let out_str = CString::from_raw(out_str_ptr);
+
+                //             let opt_val = *opt;
+
+                //             let name = if opt_val.name.is_null() {
+                //                 ""
+                //             } else {
+                //                 CStr::from_ptr((*opt).name).to_str().unwrap_or("")
+                //             };
+
+                //             let help = if opt_val.help.is_null() {
+                //                 ""
+                //             } else {
+                //                 CStr::from_ptr(opt_val.help).to_str().unwrap_or("")
+                //             };
+
+                //             println!("{:?}, {:?}, {:?}", name, help, out_str);
+                //         }
+                //     }
+                // }
             }
 
             // sws scaling context
